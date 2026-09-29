@@ -90,6 +90,58 @@ antipatrón.
 
 ---
 
-*(Este README se completa progresivamente: la sección "Decisiones de diseño" con
-el patrón aplicado y las alternativas descartadas, el diagnóstico de la Parte 2 y
-las conclusiones se agregan en commits posteriores, según avanza el trabajo.)*
+## Diagnóstico — Parte 2: las tres campañas de descuento
+
+### El escenario
+
+Dos semanas después de cerrada la Parte 1, mercadeo solicitó tres campañas
+nuevas (`BLACK_FRIDAY`, `CORPORATIVO`, `VOLUMEN`). La solución que efectivamente
+se integró al proyecto —commit anterior a este— fue agregar tres eslabones
+más a la cadena de validación que ya existía: `PromocionBlackFriday`,
+`PromocionCorporativo` y `PromocionVolumen`, encadenados después de
+`ValidadorStock` y `ValidadorCliente`.
+
+El código compila y las tres campañas funcionan. El problema, igual que en la
+Parte 1, no es funcional: es de diseño. La pregunta que separa este commit del
+anterior no es *"¿funciona?"*, sino *"¿es esta la herramienta correcta para
+este problema, o es la herramienta que ya conocíamos?"*
+
+### La evidencia: ninguna de las tres campañas necesita ser un eslabón
+
+`Chain of Responsibility` se justificó en la Parte 1 por una propiedad
+concreta: **las validaciones tienen una dependencia real de orden y de corte
+anticipado** —si `ValidadorStock` rechaza, `ValidadorCliente` no debe
+ejecutarse—. Las tres clases nuevas no comparten esa propiedad:
+
+| Campaña | ¿Depende del orden frente a las otras? | ¿Alguna vez rechaza el pedido? |
+|---|---|---|
+| `PromocionBlackFriday` | No — solo lee una bandera de configuración | No, nunca |
+| `PromocionCorporativo` | No — solo depende del NIT del cliente | No, nunca |
+| `PromocionVolumen` | No — solo depende del total de unidades del propio request | No, nunca |
+
+Ninguna de las tres necesita ejecutarse *después* de otra, ninguna necesita
+la posibilidad de cortar la cadena, y ninguna implementa la única operación
+para la que `ValidadorPedido` fue diseñado —decidir si el pedido continúa o
+se rechaza (contrato heredado de la Parte 1)—. En cambio, las tres calculan
+un porcentaje a partir de datos del pedido o del cliente: exactamente la
+misma forma que ya tienen `DescuentoVip` y `DescuentoFrecuente`.
+
+Una segunda pieza de evidencia, en el propio `ContextoPedido`: el campo
+`descuentoCampana` y su método `aplicarDescuentoCampana` (que se queda con
+"el mayor valor recibido") existen únicamente porque tres eslabones
+necesitaban escribir en un lugar compartido sin poder devolver un valor
+directamente —una señal de que se está forzando una responsabilidad de
+*cálculo* dentro de un mecanismo pensado para *validar y cortar el flujo*.
+
+### Diagnóstico: Golden Hammer
+
+Esto es Golden Hammer, no un tercer God Object ni más Spaghetti Code: la
+solución no se evaluó contra el problema nuevo, se reutilizó porque **ya
+funcionó la vez anterior** ("los eslabones ya sabían cómo conectarse entre
+sí" es, literalmente, la única justificación que motivó agregarlos así). El
+costo no es visible de inmediato —el sistema funciona— sino que aparece en
+el momento en que alguien intenta razonar sobre `ValidadorPedido`: una clase
+cuyo nombre y contrato prometen "decidir si el pedido continúa" termina
+conteniendo tres implementaciones que nunca deciden nada de eso.
+
+
