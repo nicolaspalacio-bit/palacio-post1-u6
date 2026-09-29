@@ -7,6 +7,11 @@ import com.tienda.pedidos.dto.PedidoRequest;
  * lee lo que necesita del pedido original y escribe en este objeto el resultado
  * de su propia verificacion (tipo de cliente resuelto, subtotal calculado, o el
  * rechazo con su motivo), sin que los eslabones se conozcan entre si.
+ *
+ * <p>El campo {@code descuentoCampana} que existio brevemente aqui durante el
+ * episodio de Golden Hammer de la Parte 2 se elimino junto con los tres
+ * eslabones que lo escribian: el calculo de un descuento no es responsabilidad
+ * de un objeto pensado para viajar por una cadena de validacion.</p>
  */
 public class ContextoPedido {
 
@@ -15,7 +20,6 @@ public class ContextoPedido {
     private double subtotal;
     private boolean rechazado = false;
     private String motivoRechazo;
-    private double descuentoCampana = 0;
 
     public ContextoPedido(PedidoRequest request) {
         this.request = request;
@@ -52,17 +56,5 @@ public class ContextoPedido {
     public void rechazar(String motivo) {
         this.rechazado = true;
         this.motivoRechazo = motivo;
-    }
-
-    // Campo agregado para que los nuevos eslabones de campana (Parte 2) puedan
-    // escribir un descuento sin pasar por ningun EstrategiaDescuento existente.
-    public double getDescuentoCampana() {
-        return descuentoCampana;
-    }
-
-    public void aplicarDescuentoCampana(double valor) {
-        if (valor > this.descuentoCampana) {
-            this.descuentoCampana = valor; // el mayor descuento de campana gana
-        }
     }
 }
