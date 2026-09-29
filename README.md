@@ -1,16 +1,107 @@
 # Post-contenido — Unidad 6: Antipatrones de Diseño
 
-Repositorio del post-contenido de la Unidad 6 de *Patrones de Diseño de Software*.
-Contiene un único proyecto Spring Boot (`pedidos-service/`) en el que se diagnostica
-y corrige, con evidencia extraída directamente del código, un antipatrón combinado
-en la clase `GestorPedidos` y, más adelante, un segundo antipatrón distinto que
-aparece al hacer crecer ese mismo sistema.
+![Java](https://img.shields.io/badge/Java-17-blue?style=flat-square)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-brightgreen?style=flat-square)
+![Build](https://img.shields.io/badge/Build-Maven-c71a36?style=flat-square)
+![Database](https://img.shields.io/badge/DB-H2%20(in--memory)-lightgrey?style=flat-square)
+![Tests](https://img.shields.io/badge/Tests-JUnit%205-25A162?style=flat-square)
 
-Este documento se escribe de forma incremental, en el mismo orden en que ocurrió
-el trabajo: primero el diagnóstico, después la corrección. Este commit corresponde
-únicamente al diagnóstico de la Parte 1.
+> Un sistema de gestión de pedidos que empezó concentrando, en una sola clase,
+> todo lo que un antipatrón de diseño podía concentrar — y que, al crecer,
+> tropezó con un segundo antipatrón distinto por reutilizar sin evaluar la
+> solución que le había funcionado la primera vez.
 
----
+## Contenido
+
+- [Sobre este repositorio](#sobre-este-repositorio)
+- [Arquitectura](#arquitectura)
+- [Diagnóstico — Parte 1: `GestorPedidos`](#diagnóstico--parte-1-gestorpedidos)
+- [Decisiones de diseño — Parte 1](#decisiones-de-diseño--parte-1)
+- [Diagnóstico — Parte 2: las tres campañas](#diagnóstico--parte-2-las-tres-campañas-de-descuento)
+- [Decisiones de diseño — Parte 2](#decisiones-de-diseño--parte-2)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Cómo ejecutar](#cómo-ejecutar)
+- [Pruebas](#pruebas)
+- [Historial de commits](#historial-de-commits)
+- [Herramientas utilizadas](#herramientas-utilizadas)
+- [Conclusiones](#conclusiones)
+
+## Sobre este repositorio
+
+Este es un único proyecto Spring Boot (`pedidos-service/`) con dos partes, en
+el mismo repositorio, que comparten un mismo hilo conductor: **no se indica de
+antemano qué antipatrón hay que buscar**. La Parte 1 recibe la clase
+`GestorPedidos` tal como llegó de un sistema real, se diagnostica con
+evidencia citada del código y se corrige aplicando `Chain of Responsibility`
+y `Strategy`. La Parte 2 retoma ese mismo proyecto dos semanas después de un
+ciclo de crecimiento —tres campañas de descuento nuevas— y exige reconocer
+que la forma en que se agregaron repite, sin evaluarlo, el patrón que
+funcionó en la Parte 1 donde ya no correspondía.
+
+El historial de commits de este repositorio sigue, deliberadamente, el mismo
+orden en que ocurrió el trabajo: implementar → diagnosticar → refactorizar,
+dos veces. Cada sección de este documento está fechada, en espíritu, al
+commit que la introdujo.
+
+## Arquitectura
+
+**Línea base — commit inicial.** Una única clase pública concentra seis
+responsabilidades y conoce, al mismo tiempo, la base de datos, las reglas de
+negocio y el formato del correo de confirmación.
+
+```mermaid
+flowchart TD
+    Cliente["PedidoRequest"] --> GP["GestorPedidos.procesarPedido()
+valida stock · valida cliente y mora
+calcula subtotal · calcula descuento
+persiste via JDBC · construye y envia notificacion
++ 6 metodos privados auxiliares (212 lineas en total)"]
+    GP --> DB[(Base de datos)]
+    GP --> Mail["EmailService"]
+```
+
+**Después de la Parte 1.** `GestorPedidos` pasa de saberlo todo a coordinar
+cuatro colaboradores, ninguno de los cuales conoce a los demás.
+
+```mermaid
+flowchart LR
+    GP["GestorPedidos
+(orquestador)"] --> VS["ValidadorStock"]
+    VS -- encadena --> VC["ValidadorCliente"]
+    GP --> SEL["SelectorEstrategiaDescuento"]
+    SEL --> DV["DescuentoVip"]
+    SEL --> DF["DescuentoFrecuente"]
+    SEL --> DE["DescuentoEstandar"]
+    GP --> REPO["PedidoRepository"]
+    GP --> NOT["NotificacionPedidoService"]
+    REPO --> DB[(Base de datos)]
+    NOT --> Mail["EmailService"]
+```
+
+**Después de la Parte 2 (estado final).** Las tres campañas se resuelven junto
+al descuento por tipo de cliente, no como eslabones adicionales de la cadena
+de validación; `ValidadorPedido` conserva únicamente los dos eslabones que
+justifican su uso.
+
+```mermaid
+flowchart LR
+    GP["GestorPedidos
+(orquestador)"] --> VS["ValidadorStock"]
+    VS -- encadena --> VC["ValidadorCliente"]
+    GP --> CDF["CalculadorDescuentoFinal"]
+    CDF --> SEL["SelectorEstrategiaDescuento"]
+    SEL --> DV["DescuentoVip"]
+    SEL --> DF["DescuentoFrecuente"]
+    SEL --> DE["DescuentoEstandar"]
+    CDF --> DBF["DescuentoBlackFriday"]
+    CDF --> DCO["DescuentoCorporativo"]
+    CDF --> DVO["DescuentoVolumen"]
+    GP --> REPO["PedidoRepository"]
+    GP --> NOT["NotificacionPedidoService"]
+    REPO --> DB[(Base de datos)]
+    NOT --> Mail["EmailService"]
+```
+
 
 ## Diagnóstico — Parte 1: `GestorPedidos`
 
@@ -88,6 +179,55 @@ la validación de mora y la persistencia completa. Esa dependencia innecesaria
 entre partes que no deberían conocerse es, en sí misma, el costo concreto del
 antipatrón.
 
+
+## Decisiones de diseño — Parte 1
+
+> **Validación como Chain of Responsibility.** Se eligió `Chain of
+> Responsibility` para la secuencia de validaciones, y no una lista de
+> métodos booleanos invocados en orden, porque las validaciones tienen una
+> dependencia real de orden y de corte anticipado: si `ValidadorStock`
+> rechaza el pedido, `ValidadorCliente` ni siquiera debe ejecutarse. Una
+> alternativa considerada fue un método `validarTodo()` con una lista de
+> `Predicate<ContextoPedido>`, pero esa alternativa evalúa todos los
+> predicados aunque el primero ya haya fallado, y no permite que un
+> validador decida no delegar al siguiente — el corte anticipado que sí
+> ofrece la cadena.
+
+> **Descuento como Strategy y no como parte de la cadena.** Se eligió
+> `Strategy`, y no un eslabón más de la cadena de validación, para el
+> cálculo de descuento porque las reglas de descuento no tienen una
+> dependencia de orden entre sí ni necesitan la posibilidad de "cortar" el
+> flujo: siempre se aplica exactamente una regla, determinada por el tipo
+> de cliente. Modelarlo como cadena habría obligado a introducir un
+> mecanismo artificial para garantizar que solo un eslabón module el
+> descuento, cuando un mapa de selección directa (`Strategy` +
+> `SelectorEstrategiaDescuento`) resuelve el problema con menos indirección
+> y sin condicionales.
+
+> **Persistencia y notificación en clases propias.** `PedidoRepository` y
+> `NotificacionPedidoService` se extrajeron sin cambiar ninguna sentencia
+> SQL ni la lógica de construcción del correo — el objetivo de esta parte
+> es reubicar responsabilidades, no reescribir comportamiento. La
+> alternativa de dejarlas como métodos privados de `GestorPedidos` (en
+> lugar de clases inyectables) se descartó porque no habría reducido el
+> número de razones que tiene la clase para cambiar, solo habría movido el
+> código de sitio dentro del mismo archivo.
+
+> **Eliminación de los seis métodos auxiliares.** `purgarPedidosVencidos`,
+> `obtenerHistorialCliente`, `calcularImpuestoRegional`, `formatearFactura`,
+> `construirCuerpoCorreo` y `reintentarNotificacion` no se migraron a
+> ninguna de las cuatro capas nuevas: ninguno pertenece a validar, calcular
+> el descuento, persistir o notificar *un* pedido. Migrarlos habría sido
+> reproducir el God Object en miniatura dentro de una de las clases nuevas.
+> Se eliminaron del proyecto — no se dejaron comentados — por la misma
+> razón que se explica en la Parte 2: código que nadie invoca conscientemente
+> es la semilla de un Lava Flow.
+
+Con esta refactorización, comparar el tamaño de `GestorPedidos` es la
+evidencia más directa del resultado: de **212 líneas** concentrando seis
+responsabilidades, a un orquestador de menos de 75 líneas que no contiene
+ninguna sentencia SQL, ninguna regla de descuento y ningún `StringBuilder`.
+
 ---
 
 ## Diagnóstico — Parte 2: las tres campañas de descuento
@@ -145,3 +285,150 @@ cuyo nombre y contrato prometen "decidir si el pedido continúa" termina
 conteniendo tres implementaciones que nunca deciden nada de eso.
 
 
+## Decisiones de diseño — Parte 2
+
+> **Strategy en vez de más eslabones de cadena.** Se corrigió modelando las
+> tres campañas como `EstrategiaDescuento` y no como validadores de la
+> cadena existente porque, igual que `DescuentoVip` y `DescuentoFrecuente`,
+> calculan un porcentaje sin depender de un orden de evaluación ni
+> necesitar la posibilidad de "cortar" el flujo del pedido — la propiedad
+> que sí tienen `ValidadorStock` y `ValidadorCliente`. La alternativa de
+> mantenerlas en la cadena fue descartada explícitamente por ser la causa
+> del antipatrón diagnosticado: reutilizar una herramienta conocida sin
+> verificar que el nuevo problema tuviera su misma forma.
+
+> **`CalculadorDescuentoFinal` como único punto de combinación.** Se
+> introdujo esta clase, en lugar de que `GestorPedidos` combinara
+> directamente el `SelectorEstrategiaDescuento` con las tres campañas, para
+> que la regla de negocio "se aplica el mayor descuento entre tipo de
+> cliente y campañas activas" viva en un único lugar con nombre propio y
+> sea comprobable de forma aislada — la misma regla que antes aplicaba
+> `ContextoPedido.aplicarDescuentoCampana`, pero ahora sin un campo mutable
+> compartido escrito por clases que no son responsables de validar nada.
+
+> **Eliminar, no comentar, el código descartado.** Se eliminaron por
+> completo `PromocionBlackFriday`, `PromocionCorporativo`,
+> `PromocionVolumen` y el campo `descuentoCampana` en vez de dejarlos
+> comentados como referencia histórica. Comentar código "por si se
+> necesita después" es precisamente el mecanismo por el que nace un Lava
+> Flow: nadie se atreve a borrarlo más adelante porque ya no queda claro
+> si todavía cumple alguna función, y el historial de Git — no el código
+> fuente activo — es el lugar correcto para conservar esa referencia.
+
+**Equivalencia verificada, no solo asumida.** La suite de pruebas que
+ejercita las tres campañas (`campanaCorporativo_clienteConNit`,
+`campanaVolumen_masDeVeinteUnidades` y `CampanaBlackFridayTest`) se escribió
+mientras las tres campañas todavía eran eslabones de la cadena, y **no
+requirió ninguna modificación** después de moverlas a `Strategy` — ambas
+implementaciones producen exactamente el mismo `total` para los mismos
+casos, porque las pruebas verifican el comportamiento observable de
+`GestorPedidos`, no los colaboradores internos que usa para lograrlo.
+
+---
+
+## Estructura del proyecto
+
+```
+pedidos-service/
+├── pom.xml
+└── src/
+    ├── main/
+    │   ├── java/com/tienda/pedidos/
+    │   │   ├── PedidosServiceApplication.java
+    │   │   ├── dto/
+    │   │   │   ├── PedidoRequest.java
+    │   │   │   ├── ItemPedido.java
+    │   │   │   └── ResultadoPedido.java
+    │   │   ├── validacion/                  Chain of Responsibility
+    │   │   │   ├── ContextoPedido.java
+    │   │   │   ├── ValidadorPedido.java
+    │   │   │   ├── ValidadorStock.java
+    │   │   │   └── ValidadorCliente.java
+    │   │   ├── descuento/                    Strategy
+    │   │   │   ├── EstrategiaDescuento.java
+    │   │   │   ├── DescuentoVip.java
+    │   │   │   ├── DescuentoFrecuente.java
+    │   │   │   ├── DescuentoEstandar.java
+    │   │   │   ├── DescuentoBlackFriday.java
+    │   │   │   ├── DescuentoCorporativo.java
+    │   │   │   ├── DescuentoVolumen.java
+    │   │   │   ├── SelectorEstrategiaDescuento.java
+    │   │   │   └── CalculadorDescuentoFinal.java
+    │   │   └── service/
+    │   │       ├── GestorPedidos.java        orquestador delgado
+    │   │       ├── PedidoRepository.java
+    │   │       ├── NotificacionPedidoService.java
+    │   │       ├── EmailService.java
+    │   │       └── ConsoleEmailService.java
+    │   └── resources/
+    │       ├── application.properties
+    │       ├── schema.sql
+    │       └── data.sql
+    └── test/java/com/tienda/pedidos/
+        ├── GestorPedidosIntegrationTest.java
+        └── CampanaBlackFridayTest.java
+```
+
+## Cómo ejecutar
+
+```bash
+mvn spring-boot:run
+```
+
+Con la aplicación corriendo, la consola de H2 queda disponible en
+`http://localhost:8080/h2-console` (JDBC URL `jdbc:h2:mem:pedidosdb`, usuario
+`sa`, sin contraseña) para inspeccionar el esquema y los datos de prueba
+descritos en `data.sql`.
+
+```bash
+mvn test
+```
+
+## Pruebas
+
+| Escenario | Cliente de prueba | Resultado esperado |
+|---|---|---|
+| Stock insuficiente | 5 (ESTANDAR), producto 105 | Rechazado |
+| Cliente inexistente | 9999 | Rechazado |
+| Moroso con deuda, dentro/fuera del horario de corte | 4 (MOROSO) | Depende de la hora de ejecución (ver comentario en la prueba) |
+| Moroso con deuda ya saldada | 6 (MOROSO) | Confirmado |
+| Descuento VIP (monto alto / monto bajo) | 1 (VIP) | Confirmado, 15 % / 5 % |
+| Descuento FRECUENTE (>10 / 4–10 pedidos previos) | 2 y 3 (FRECUENTE) | Confirmado, 8 % / 4 % |
+| Sin ninguna regla de descuento | 5 (ESTANDAR) | Confirmado, 0 % |
+| Campaña CORPORATIVO (cliente con NIT) | 7 (ESTANDAR + NIT) | Confirmado, 10 % |
+| Campaña VOLUMEN (> 20 unidades) | 5 (ESTANDAR) | Confirmado, 12 % |
+| Campaña BLACK FRIDAY (bandera activa) | 5 (ESTANDAR), contexto propio | Confirmado, 25 % |
+
+## Historial de commits
+
+| # | Mensaje | Qué documenta |
+|---|---|---|
+| 1 | `feat: implementar GestorPedidos...` | Línea base: God Object + Spaghetti Code, con su suite de pruebas de regresión |
+| 2 | `docs: documentar diagnostico de God Object y Spaghetti Code...` | Diagnóstico de la Parte 1, con evidencia citada, **antes** de tocar el código |
+| 3 | `refactor: extraer validaciones a Chain of Responsibility y descuentos a Strategy` | Las cuatro capas nuevas |
+| 4 | `refactor: reducir GestorPedidos a orquestador delgado...` | `GestorPedidos` queda como coordinador |
+| 5 | `feat: agregar 3 campanas de descuento como eslabones...` | El crecimiento del sistema que introduce Golden Hammer |
+| 6 | `docs: diagnosticar Golden Hammer...` | Diagnóstico de la Parte 2, con evidencia citada |
+| 7 | `refactor: mover las 3 campanas de la cadena de validacion a EstrategiaDescuento` | La corrección, y la eliminación (no comentado) del código descartado |
+| 8 | `docs: completar README con decisiones de diseño de ambas partes y conclusiones` | Este commit |
+
+## Herramientas utilizadas
+
+- Java 17, Spring Boot 3.2.5, Spring JDBC, Maven, H2 Database (en memoria)
+- JUnit 5 y Spring Boot Test para la suite de regresión
+- Git y GitHub para el control de versiones e historial del diagnóstico
+
+## Conclusiones
+
+Los dos antipatrones de este repositorio comparten una misma causa raíz —una
+decisión de diseño que fue razonable la primera vez y se repitió sin
+reevaluarse— pero se manifiestan de forma opuesta: el God Object de la Parte
+1 nace de *no separar* nada desde el principio, mientras que el Golden
+Hammer de la Parte 2 nace de *separar exactamente igual que la vez anterior*,
+sin verificar que el problema nuevo tuviera la misma forma. Ninguno de los
+dos se detecta con una regla mecánica ("más de N líneas", "más de M
+eslabones"); ambos exigieron volver a la pregunta de diseño original —¿qué
+depende de qué, y por qué?— en lugar de repetir la última solución que
+funcionó. La evidencia más útil que deja este ejercicio no es el código
+final, sino la disciplina de exigir esa pregunta cada vez que el sistema
+crece, incluso cuando la solución conocida "ya sabe cómo conectarse".
