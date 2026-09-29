@@ -5,6 +5,9 @@ import com.tienda.pedidos.dto.ItemPedido;
 import com.tienda.pedidos.dto.PedidoRequest;
 import com.tienda.pedidos.dto.ResultadoPedido;
 import com.tienda.pedidos.validacion.ContextoPedido;
+import com.tienda.pedidos.validacion.PromocionBlackFriday;
+import com.tienda.pedidos.validacion.PromocionCorporativo;
+import com.tienda.pedidos.validacion.PromocionVolumen;
 import com.tienda.pedidos.validacion.ValidadorCliente;
 import com.tienda.pedidos.validacion.ValidadorPedido;
 import com.tienda.pedidos.validacion.ValidadorStock;
@@ -29,9 +32,15 @@ public class GestorPedidos {
     private final JdbcTemplate jdbcTemplate;
 
     public GestorPedidos(ValidadorStock stock, ValidadorCliente cliente,
-                          SelectorEstrategiaDescuento selector, PedidoRepository repository,
-                          NotificacionPedidoService notificacion, JdbcTemplate jdbcTemplate) {
-        this.primerValidador = stock.encadenar(cliente);
+                          PromocionBlackFriday blackFriday, PromocionCorporativo corporativo,
+                          PromocionVolumen volumen, SelectorEstrategiaDescuento selector,
+                          PedidoRepository repository, NotificacionPedidoService notificacion,
+                          JdbcTemplate jdbcTemplate) {
+        // Las tres campanas nuevas se resuelven "enganchandose" a la misma cadena que ya
+        // funcionaba para stock y cliente -- el patron que se diagnostica como Golden
+        // Hammer en el README de esta parte.
+        this.primerValidador = stock.encadenar(cliente)
+            .encadenar(blackFriday).encadenar(corporativo).encadenar(volumen);
         this.selector = selector;
         this.repository = repository;
         this.notificacion = notificacion;
@@ -48,7 +57,8 @@ public class GestorPedidos {
         double subtotal = calcularSubtotal(request);
         contexto.setSubtotal(subtotal);
 
-        double descuento = selector.seleccionar(contexto.getTipoCliente()).calcular(contexto);
+        double descuentoTipoCliente = selector.seleccionar(contexto.getTipoCliente()).calcular(contexto);
+        double descuento = Math.max(descuentoTipoCliente, contexto.getDescuentoCampana());
         double impuesto = (subtotal - subtotal * descuento) * 0.19;
         double total = subtotal - (subtotal * descuento) + impuesto;
 

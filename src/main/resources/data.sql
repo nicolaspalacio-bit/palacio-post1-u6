@@ -7,17 +7,19 @@
 --   4 -> MOROSO con deuda pendiente (ruta de rechazo)
 --   5 -> ESTANDAR sin ninguna regla de descuento aplicable
 --   6 -> MOROSO con su deuda ya saldada (no debe rechazarse)
+--   7 -> ESTANDAR con NIT registrado, para la campana CORPORATIVO (Parte 2)
 -- El id 9999 se deja deliberadamente sin fila en `clientes` para el caso
 -- "cliente inexistente".
 -- ---------------------------------------------------------------------------
 
-INSERT INTO clientes (id, nombre, tipo_cliente) VALUES
-  (1, 'Laura Restrepo',      'VIP'),
-  (2, 'Comercial Andina SAS','FRECUENTE'),
-  (3, 'Julian Ospina',       'FRECUENTE'),
-  (4, 'Marcela Duque',       'MOROSO'),
-  (5, 'Pedro Salcedo',       'ESTANDAR'),
-  (6, 'Camila Rojas',        'MOROSO');
+INSERT INTO clientes (id, nombre, tipo_cliente, nit) VALUES
+  (1, 'Laura Restrepo',      'VIP',       NULL),
+  (2, 'Comercial Andina SAS','FRECUENTE', NULL),
+  (3, 'Julian Ospina',       'FRECUENTE', NULL),
+  (4, 'Marcela Duque',       'MOROSO',    NULL),
+  (5, 'Pedro Salcedo',       'ESTANDAR',  NULL),
+  (6, 'Camila Rojas',        'MOROSO',    NULL),
+  (7, 'Distribuciones Andina SAS', 'ESTANDAR', '900123456-7');
 
 INSERT INTO productos (id, nombre, precio) VALUES
   (101, 'Teclado mecanico',        150000),

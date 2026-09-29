@@ -156,4 +156,35 @@ class GestorPedidosIntegrationTest {
         assertTrue(resultado.isConfirmado());
         assertEquals(95_200.0, resultado.getTotal(), DELTA);
     }
+
+    // ---------------------------------------------------------------------
+    // Parte 2 — campanas de descuento (Black Friday se prueba aparte, en
+    // CampanaBlackFridayTest, con su propio contexto y la bandera activa;
+    // en este contexto la bandera permanece en false, por lo que Corporativo
+    // y Volumen se observan sin que Black Friday los enmascare).
+    // ---------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Cliente con NIT registrado recibe el descuento de campana CORPORATIVO")
+    void campanaCorporativo_clienteConNit() {
+        PedidoRequest request = new PedidoRequest(7L, "compras@distribucionesandina.com",
+            List.of(new ItemPedido(103L, 1))); // 650000
+
+        ResultadoPedido resultado = gestorPedidos.procesarPedido(request);
+
+        assertTrue(resultado.isConfirmado());
+        assertEquals(696_150.0, resultado.getTotal(), DELTA);
+    }
+
+    @Test
+    @DisplayName("Pedido con mas de 20 unidades recibe el descuento de campana VOLUMEN")
+    void campanaVolumen_masDeVeinteUnidades() {
+        PedidoRequest request = new PedidoRequest(5L, "pedro.salcedo@correo.com",
+            List.of(new ItemPedido(102L, 25))); // 80000 x 25 = 2000000
+
+        ResultadoPedido resultado = gestorPedidos.procesarPedido(request);
+
+        assertTrue(resultado.isConfirmado());
+        assertEquals(2_094_400.0, resultado.getTotal(), DELTA);
+    }
 }

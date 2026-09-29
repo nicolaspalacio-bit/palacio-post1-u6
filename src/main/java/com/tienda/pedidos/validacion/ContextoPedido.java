@@ -15,6 +15,7 @@ public class ContextoPedido {
     private double subtotal;
     private boolean rechazado = false;
     private String motivoRechazo;
+    private double descuentoCampana = 0;
 
     public ContextoPedido(PedidoRequest request) {
         this.request = request;
@@ -51,5 +52,17 @@ public class ContextoPedido {
     public void rechazar(String motivo) {
         this.rechazado = true;
         this.motivoRechazo = motivo;
+    }
+
+    // Campo agregado para que los nuevos eslabones de campana (Parte 2) puedan
+    // escribir un descuento sin pasar por ningun EstrategiaDescuento existente.
+    public double getDescuentoCampana() {
+        return descuentoCampana;
+    }
+
+    public void aplicarDescuentoCampana(double valor) {
+        if (valor > this.descuentoCampana) {
+            this.descuentoCampana = valor; // el mayor descuento de campana gana
+        }
     }
 }

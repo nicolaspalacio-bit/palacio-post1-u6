@@ -14,7 +14,10 @@ DROP TABLE IF EXISTS clientes;
 CREATE TABLE clientes (
     id            BIGINT PRIMARY KEY,
     nombre        VARCHAR(120) NOT NULL,
-    tipo_cliente  VARCHAR(20)  NOT NULL
+    tipo_cliente  VARCHAR(20)  NOT NULL,
+    -- Columna agregada en la Parte 2 para la campana CORPORATIVO: un cliente
+    -- con NIT registrado accede a un descuento adicional de campana.
+    nit           VARCHAR(20)
 );
 
 CREATE TABLE productos (
