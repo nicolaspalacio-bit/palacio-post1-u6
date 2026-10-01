@@ -8,10 +8,9 @@ import com.tienda.pedidos.dto.PedidoRequest;
  * de su propia verificacion (tipo de cliente resuelto, subtotal calculado, o el
  * rechazo con su motivo), sin que los eslabones se conozcan entre si.
  *
- * <p>El campo {@code descuentoCampana} que existio brevemente aqui durante el
- * episodio de Golden Hammer de la Parte 2 se elimino junto con los tres
- * eslabones que lo escribian: el calculo de un descuento no es responsabilidad
- * de un objeto pensado para viajar por una cadena de validacion.</p>
+ * <p>No guarda ningun descuento: el calculo del descuento no es responsabilidad
+ * de un objeto pensado para viajar por una cadena de validacion, sino de
+ * {@code CalculadorDescuentoFinal}.</p>
  */
 public class ContextoPedido {
 
