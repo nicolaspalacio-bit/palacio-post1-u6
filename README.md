@@ -13,8 +13,6 @@
 
 ## Contenido
 
-- [Sobre este repositorio](#sobre-este-repositorio)
-- [Arquitectura](#arquitectura)
 - [Diagnóstico — Parte 1: `GestorPedidos`](#diagnóstico--parte-1-gestorpedidos)
 - [Decisiones de diseño — Parte 1](#decisiones-de-diseño--parte-1)
 - [Diagnóstico — Parte 2: las tres campañas](#diagnóstico--parte-2-las-tres-campañas-de-descuento)
@@ -85,7 +83,7 @@ flowchart LR
 
 ### El síntoma de fondo
 
-`GestorPedidos.procesarPedido(PedidoRequest)` es, a la fecha de este commit, el
+`GestorPedidos.procesarPedido(PedidoRequest)` es, el
 **único método público de la clase**, y sin embargo concentra seis responsabilidades
 que no tienen ninguna razón estructural para compartir un mismo método:
 
