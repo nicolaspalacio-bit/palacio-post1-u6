@@ -13,6 +13,8 @@
 
 ## Contenido
 
+- [Descripción](#descripción)
+- [Arquitectura](#arquitectura)
 - [Diagnóstico — Parte 1: `GestorPedidos`](#diagnóstico--parte-1-gestorpedidos)
 - [Decisiones de diseño — Parte 1](#decisiones-de-diseño--parte-1)
 - [Diagnóstico — Parte 2: las tres campañas](#diagnóstico--parte-2-las-tres-campañas-de-descuento)
@@ -20,10 +22,35 @@
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Cómo ejecutar](#cómo-ejecutar)
 - [Pruebas](#pruebas)
+- [Comparación antes/después de la salida](#comparación-antesdespués-de-la-salida)
+- [Correcciones detectadas al ejecutar las pruebas](#correcciones-detectadas-al-ejecutar-las-pruebas)
 - [Historial de commits](#historial-de-commits)
 - [Herramientas utilizadas](#herramientas-utilizadas)
 - [Conclusiones](#conclusiones)
 
+## Descripción
+
+Repositorio del post-contenido de la Unidad 6 de Patrones de Diseño de
+Software — Sexto Semestre. Es un único proyecto Spring Boot (`pedidos-service`)
+con dos partes que no indican de antemano qué antipatrón buscar:
+
+- **Parte 1.** La clase `GestorPedidos` concentraba validación, cálculo de
+  precios, persistencia vía JDBC y notificación en un solo método. Se
+  diagnostica con evidencia citada del código (God Object y Spaghetti Code) y
+  se corrige con `Chain of Responsibility` para las validaciones y `Strategy`
+  para el descuento.
+- **Parte 2.** El mismo proyecto crece con tres campañas de descuento que se
+  agregaron como eslabones de la cadena de validación. Se diagnostica Golden
+  Hammer y se corrige moviendo las campañas a `EstrategiaDescuento`.
+
+El historial de commits sigue el orden real del trabajo: implementar,
+diagnosticar y refactorizar, dos veces.
+
+## Arquitectura
+
+**Línea base — commit inicial.** Una única clase pública concentra seis
+responsabilidades y conoce, al mismo tiempo, la base de datos, las reglas de
+negocio y el formato del correo de confirmación.
 
 ```mermaid
 flowchart TD
@@ -83,7 +110,7 @@ flowchart LR
 
 ### El síntoma de fondo
 
-`GestorPedidos.procesarPedido(PedidoRequest)` es, el
+`GestorPedidos.procesarPedido(PedidoRequest)` es el
 **único método público de la clase**, y sin embargo concentra seis responsabilidades
 que no tienen ninguna razón estructural para compartir un mismo método:
 
@@ -182,7 +209,7 @@ antipatrón.
 
 > **Persistencia y notificación en clases propias.** `PedidoRepository` y
 > `NotificacionPedidoService` se extrajeron sin cambiar ninguna sentencia
-> SQL ni la lógica de construcción del correo — el objetivo de esta parte
+> `INSERT`/`UPDATE` ni la lógica de construcción del correo — el objetivo de esta parte
 > es reubicar responsabilidades, no reescribir comportamiento. La
 > alternativa de dejarlas como métodos privados de `GestorPedidos` (en
 > lugar de clases inyectables) se descartó porque no habría reducido el
@@ -201,8 +228,9 @@ antipatrón.
 
 Con esta refactorización, comparar el tamaño de `GestorPedidos` es la
 evidencia más directa del resultado: de **212 líneas** concentrando seis
-responsabilidades, a un orquestador de menos de 75 líneas que no contiene
-ninguna sentencia SQL, ninguna regla de descuento y ningún `StringBuilder`.
+responsabilidades, a un orquestador de unas 80 líneas sin ninguna regla de
+validación ni de descuento, sin `StringBuilder` y con una sola consulta SQL (el
+precio de cada ítem en `calcularSubtotal`, un paso de agregación trivial).
 
 ---
 
@@ -375,6 +403,61 @@ mvn test
 | Campaña VOLUMEN (> 20 unidades) | 5 (ESTANDAR) | Confirmado, 12 % |
 | Campaña BLACK FRIDAY (bandera activa) | 5 (ESTANDAR), contexto propio | Confirmado, 25 % |
 
+Resultado de `mvn test` con la versión final: **Tests run: 12, Failures: 0,
+Errors: 0** (11 en `GestorPedidosIntegrationTest` y 1 en
+`CampanaBlackFridayTest`).
+
+## Comparación antes/después de la salida
+
+Los totales salen de `total = (subtotal − subtotal × descuento) × 1,19`. La
+misma suite exige estos valores a todas las versiones del proyecto: el
+`GestorPedidos` original, la refactorización de la Parte 1, la versión con los
+tres eslabones de Golden Hammer y la versión corregida con `Strategy`. Las
+pruebas no se modificaron al refactorizar; solo cambió el código que las
+cumple.
+
+| Caso | Subtotal | Descuento | Total esperado | Prueba presente desde | Resultado versión final |
+|---|---:|---:|---:|---|---|
+| Stock insuficiente (producto 105) | — | — | Rechazado | Commit 1 (original) | Rechazado ✔ |
+| Cliente inexistente (9999) | — | — | Rechazado | Commit 1 (original) | Rechazado ✔ |
+| VIP, subtotal alto | 1.800.000 | 15 % | 1.820.700 | Commit 1 (original) | 1.820.700 ✔ |
+| VIP, subtotal bajo | 80.000 | 5 % | 90.440 | Commit 1 (original) | 90.440 ✔ |
+| FRECUENTE, más de 10 pedidos | 150.000 | 8 % | 164.220 | Commit 1 (original) | 164.220 ✔ |
+| FRECUENTE, 4 a 10 pedidos | 150.000 | 4 % | 171.360 | Commit 1 (original) | 171.360 ✔ |
+| ESTANDAR, sin descuento | 80.000 | 0 % | 95.200 | Commit 1 (original) | 95.200 ✔ |
+| Campaña CORPORATIVO (NIT) | 650.000 | 10 % | 696.150 | Commit 5 (Golden Hammer) | 696.150 ✔ |
+| Campaña VOLUMEN (25 unidades) | 2.000.000 | 12 % | 2.094.400 | Commit 5 (Golden Hammer) | 2.094.400 ✔ |
+| Campaña BLACK FRIDAY (activa) | 650.000 | 25 % | 580.125 | Commit 5 (Golden Hammer) | 580.125 ✔ |
+
+Cada valor esperado se escribió junto con la versión "antes" (el `GestorPedidos`
+original o los eslabones de Golden Hammer) y se mantuvo sin cambios en las
+versiones "después". La columna de resultado es la ejecución actual de
+`mvn test`. Las versiones anteriores comparten los tres errores de la sección
+siguiente, que no cambian ninguna regla de negocio pero impedían ejecutarlas
+sobre H2 2.x.
+
+## Correcciones detectadas al ejecutar las pruebas
+
+Al ejecutar la suite completa con Maven aparecieron tres errores que venían del
+código base del enunciado y que no tienen relación con los antipatrones
+diagnosticados. Se corrigieron sin cambiar ninguna regla de negocio:
+
+1. **La cadena empezaba en el eslabón equivocado.** `encadenar(siguiente)`
+   devuelve el eslabón *siguiente* (para poder escribir
+   `.encadenar(a).encadenar(b)`), así que `primerValidador =
+   stock.encadenar(cliente)` dejaba la cadena empezando en `ValidadorCliente` y
+   `ValidadorStock` nunca se ejecutaba. Ahora se encadena primero y se asigna
+   `stock` como cabeza de la cadena.
+2. **Cliente inexistente.** `queryForObject` lanza
+   `EmptyResultDataAccessException` cuando no hay ninguna fila; nunca devuelve
+   `null`. `ValidadorCliente` usa ahora `query(...)` con un extractor que
+   devuelve `null` si no hay fila, para llegar al rechazo "Cliente no
+   registrado".
+3. **`CALL IDENTITY()` no existe en H2 2.x** fuera del modo de compatibilidad
+   LEGACY. `PedidoRepository` obtiene ahora el id generado con
+   `GeneratedKeyHolder`, el mecanismo estándar de Spring JDBC; las sentencias
+   `INSERT`/`UPDATE` no cambiaron.
+
 ## Historial de commits
 
 | # | Mensaje | Qué documenta |
@@ -386,7 +469,11 @@ mvn test
 | 5 | `feat: agregar 3 campanas de descuento como eslabones...` | El crecimiento del sistema que introduce Golden Hammer |
 | 6 | `docs: diagnosticar Golden Hammer...` | Diagnóstico de la Parte 2, con evidencia citada |
 | 7 | `refactor: mover las 3 campanas de la cadena de validacion a EstrategiaDescuento` | La corrección, y la eliminación (no comentado) del código descartado |
-| 8 | `docs: completar README con decisiones de diseño de ambas partes y conclusiones` | Este commit |
+| 8 | `docs: completar README con decisiones de diseño de ambas partes y conclusiones` | Decisiones de diseño de ambas partes y conclusiones |
+| 9 | `fix(validacion): conservar ValidadorStock como cabeza de la cadena...` | Correcciones 1 y 2 de la sección anterior |
+| 10 | `fix(persistencia): obtener el id del pedido con GeneratedKeyHolder...` | Corrección 3 |
+| 11 | `chore: quitar de los comentarios las referencias a las clases eliminadas...` | Sin rastro de `Promocion*` ni `descuentoCampana`, ni siquiera en comentarios |
+| 12 | `docs: completar README con descripcion, comparacion antes/despues y correcciones` | Este commit |
 
 ## Herramientas utilizadas
 
