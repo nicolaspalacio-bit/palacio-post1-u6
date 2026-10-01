@@ -26,28 +26,6 @@
 - [Herramientas utilizadas](#herramientas-utilizadas)
 - [Conclusiones](#conclusiones)
 
-## Sobre este repositorio
-
-Este es un único proyecto Spring Boot (`pedidos-service/`) con dos partes, en
-el mismo repositorio, que comparten un mismo hilo conductor: **no se indica de
-antemano qué antipatrón hay que buscar**. La Parte 1 recibe la clase
-`GestorPedidos` tal como llegó de un sistema real, se diagnostica con
-evidencia citada del código y se corrige aplicando `Chain of Responsibility`
-y `Strategy`. La Parte 2 retoma ese mismo proyecto dos semanas después de un
-ciclo de crecimiento —tres campañas de descuento nuevas— y exige reconocer
-que la forma en que se agregaron repite, sin evaluarlo, el patrón que
-funcionó en la Parte 1 donde ya no correspondía.
-
-El historial de commits de este repositorio sigue, deliberadamente, el mismo
-orden en que ocurrió el trabajo: implementar → diagnosticar → refactorizar,
-dos veces. Cada sección de este documento está fechada, en espíritu, al
-commit que la introdujo.
-
-## Arquitectura
-
-**Línea base — commit inicial.** Una única clase pública concentra seis
-responsabilidades y conoce, al mismo tiempo, la base de datos, las reglas de
-negocio y el formato del correo de confirmación.
 
 ```mermaid
 flowchart TD
