@@ -25,8 +25,15 @@ public class ValidadorCliente extends ValidadorPedido {
     @Override
     protected void ejecutar(ContextoPedido contexto) {
         Long clienteId = contexto.getRequest().getClienteId();
-        String tipo = jdbcTemplate.queryForObject(
-            "SELECT tipo_cliente FROM clientes WHERE id = ?", String.class, clienteId);
+        // Se usa query(...) con un ResultSetExtractor en lugar de queryForObject(...)
+        // porque queryForObject lanza EmptyResultDataAccessException cuando no hay
+        // ninguna fila -- nunca devuelve null -- lo que impedia alcanzar la rama de
+        // "cliente no registrado" de mas abajo (se detecto al ejecutar la suite de
+        // pruebas con un cliente inexistente).
+        String tipo = jdbcTemplate.query(
+            "SELECT tipo_cliente FROM clientes WHERE id = ?",
+            rs -> rs.next() ? rs.getString(1) : null,
+            clienteId);
         if (tipo == null) {
             contexto.rechazar("Cliente no registrado");
             return;

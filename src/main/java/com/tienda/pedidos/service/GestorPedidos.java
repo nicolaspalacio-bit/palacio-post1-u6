@@ -34,7 +34,12 @@ public class GestorPedidos {
     public GestorPedidos(ValidadorStock stock, ValidadorCliente cliente,
                           CalculadorDescuentoFinal calculadorDescuento, PedidoRepository repository,
                           NotificacionPedidoService notificacion, JdbcTemplate jdbcTemplate) {
-        this.primerValidador = stock.encadenar(cliente);
+        // encadenar(siguiente) devuelve "siguiente" (para poder seguir
+        // extendiendo la cadena con .encadenar(...).encadenar(...)), asi que
+        // la cabeza real de la cadena sigue siendo "stock": se asigna aparte,
+        // no como resultado de la llamada a encadenar().
+        stock.encadenar(cliente);
+        this.primerValidador = stock;
         this.calculadorDescuento = calculadorDescuento;
         this.repository = repository;
         this.notificacion = notificacion;
